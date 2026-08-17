@@ -1,0 +1,13 @@
+{
+  "name": "email-sender",
+  "version": "1.0.0",
+  "description": "Nodemailer + Gmail App Password se email bhejne wala mini app (GET API + HTML interface)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.14"
+  }
+}

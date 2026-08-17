@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Email Sender — Nodemailer + Gmail</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #171a21;
+    --border: #262b35;
+    --text: #e7e9ee;
+    --muted: #9aa1af;
+    --accent: #4f7cff;
+    --accent-hover: #6b8fff;
+    --danger: #ff6b6b;
+    --success: #4fd18b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+  p.sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 24px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin: 14px 0 6px;
+  }
+  input, textarea {
+    width: 100%;
+    background: #10131a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  textarea { min-height: 110px; resize: vertical; }
+  button {
+    margin-top: 22px;
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .status {
+    margin-top: 16px;
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    display: none;
+  }
+  .status.success { background: rgba(79,209,139,0.12); color: var(--success); display: block; }
+  .status.error { background: rgba(255,107,107,0.12); color: var(--danger); display: block; }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .hint a { color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Email Sender</h1>
+    <p class="sub">Nodemailer + Gmail App Password se mail bhejo</p>
+
+    <form id="mailForm">
+      <label for="senderName">Sender Name</label>
+      <input type="text" id="senderName" placeholder="e.g. Rahul Sharma" />
+
+      <label for="senderEmail">Sender Gmail ID</label>
+      <input type="email" id="senderEmail" placeholder="you@gmail.com" required />
+
+      <label for="appPassword">Gmail App Password</label>
+      <input type="password" id="appPassword" placeholder="16-digit app password" required />
+      <div class="hint">Normal password kaam nahi karega. <a href="https://myaccount.google.com/apppasswords" target="_blank">App Password yahan se banao</a>.</div>
+
+      <label for="toEmail">Receiver Emails <span class="hint" style="display:inline">(ek line me ek email)</span></label>
+      <textarea id="toEmail" placeholder="receiver1@example.com&#10;receiver2@example.com&#10;receiver3@example.com" required style="min-height:90px;"></textarea>
+
+      <label for="subject">Subject Line</label>
+      <input type="text" id="subject" placeholder="Mail ka subject" required />
+
+      <label for="message">Message</label>
+      <textarea id="message" placeholder="Yahan apna message likho..." required></textarea>
+
+      <button type="submit" id="sendBtn">Send Email</button>
+      <div class="status" id="status"></div>
+    </form>
+  </div>
+
+<script>
+const form = document.getElementById("mailForm");
+const statusBox = document.getElementById("status");
+const sendBtn = document.getElementById("sendBtn");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const params = new URLSearchParams({
+    senderName: document.getElementById("senderName").value,
+    senderEmail: document.getElementById("senderEmail").value,
+    appPassword: document.getElementById("appPassword").value,
+    toEmail: document.getElementById("toEmail").value,
+    subject: document.getElementById("subject").value,
+    message: document.getElementById("message").value,
+  });
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = "Sending...";
+  statusBox.className = "status";
+  statusBox.textContent = "";
+
+  try {
+    const res = await fetch(`/send-mail?${params.toString()}`);
+    const data = await res.json();
+
+    if (data.success) {
+      statusBox.className = "status success";
+      statusBox.textContent = "✅ " + data.message + (data.recipients ? ` (${data.recipients.join(", ")})` : "");
+      form.reset();
+    } else {
+      statusBox.className = "status error";
+      statusBox.textContent = "❌ " + data.error;
+    }
+  } catch (err) {
+    statusBox.className = "status error";
+    statusBox.textContent = "❌ Kuch galat hua: " + err.message;
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Send Email";
+  }
+});
+</script>
+</body>
+</html>
