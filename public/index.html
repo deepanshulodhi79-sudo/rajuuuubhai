@@ -154,7 +154,7 @@ form.addEventListener("submit", async (e) => {
     if (data.success) {
       statusBox.className = "status success";
       statusBox.textContent = "✅ " + data.message;
-      form.reset();
+      // Form fields ab reset nahi honge — jab tak user khud change/clear na kare
     } else {
       statusBox.className = "status error";
       statusBox.textContent = "❌ " + data.error;
