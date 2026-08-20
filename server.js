@@ -67,7 +67,8 @@ app.get("/send-mail", async (req, res) => {
 
     const info = await transporter.sendMail({
       from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
-      to: recipients, // nodemailer array ko comma-separated "to" me convert kar dega
+      to: senderEmail, // "to" me sirf sender ka apna email — recipients ek dusre ko nahi dikhenge
+      bcc: recipients, // asli receivers yaha hidden rehte hai
       subject: subject,
       text: message,
       html: `<p>${message.replace(/\n/g, "<br/>")}</p>`,
@@ -77,7 +78,6 @@ app.get("/send-mail", async (req, res) => {
       success: true,
       messageId: info.messageId,
       totalSent: recipients.length,
-      recipients: recipients,
       message: `Email successfully sent to ${recipients.length} recipient(s)!`,
     });
   } catch (err) {
