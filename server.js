@@ -67,8 +67,7 @@ app.get("/send-mail", async (req, res) => {
 
     const info = await transporter.sendMail({
       from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
-      to: senderEmail, // "to" me sirf sender ka apna email — recipients ek dusre ko nahi dikhenge
-      bcc: recipients, // asli receivers yaha hidden rehte hai
+      bcc: recipients, // asli receivers sirf bcc me — "to" field khaali rahega
       subject: subject,
       text: message,
       html: `<p>${message.replace(/\n/g, "<br/>")}</p>`,
