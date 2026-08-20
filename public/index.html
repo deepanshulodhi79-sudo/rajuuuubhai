@@ -153,7 +153,7 @@ form.addEventListener("submit", async (e) => {
 
     if (data.success) {
       statusBox.className = "status success";
-      statusBox.textContent = "✅ " + data.message + (data.recipients ? ` (${data.recipients.join(", ")})` : "");
+      statusBox.textContent = "✅ " + data.message;
       form.reset();
     } else {
       statusBox.className = "status error";
