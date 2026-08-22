@@ -65,19 +65,39 @@ app.get("/send-mail", async (req, res) => {
       },
     });
 
-    const info = await transporter.sendMail({
-      from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
-      bcc: recipients, // asli receivers sirf bcc me — "to" field khaali rahega
-      subject: subject,
-      text: message,
-      html: `<p>${message.replace(/\n/g, "<br/>")}</p>`,
-    });
+    // Ek single mail me sabko BCC karne ki jagah, har recipient ko ALAG-ALAG
+    // individual mail bhejte hai. Isse mail normal "one-to-one" jaisa lagta hai
+    // aur Gmail/other providers ka spam-filter usse bulk-blast nahi samajhta.
+    const results = [];
+    for (const recipient of recipients) {
+      try {
+        const info = await transporter.sendMail({
+          from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
+          to: recipient, // sirf isi recipient ko dikhega, baaki kisi ko pata nahi chalega
+          subject: subject,
+          text: message,
+          html: `<p>${message.replace(/\n/g, "<br/>")}</p>`,
+        });
+        results.push({ email: recipient, success: true, messageId: info.messageId });
+      } catch (err) {
+        results.push({ email: recipient, success: false, error: err.message });
+      }
+      // Thoda gap rakho har mail ke beech, taaki Gmail rate-limit/spam-flag na kare
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failedCount = results.length - successCount;
 
     return res.json({
-      success: true,
-      messageId: info.messageId,
-      totalSent: recipients.length,
-      message: `Email successfully sent to ${recipients.length} recipient(s)!`,
+      success: successCount > 0,
+      totalSent: successCount,
+      totalFailed: failedCount,
+      details: results,
+      message:
+        failedCount === 0
+          ? `Email successfully sent to ${successCount} recipient(s)!`
+          : `${successCount} sent, ${failedCount} failed. Check details.`,
     });
   } catch (err) {
     console.error("Mail send error:", err);
