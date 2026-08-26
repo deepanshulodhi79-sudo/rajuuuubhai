@@ -55,32 +55,47 @@ app.get("/send-mail", async (req, res) => {
   }
 
   try {
-    // Gmail SMTP transporter, App Password ke sath
+    // Gmail SMTP transporter — pool:true se connection reuse hota hai (naya
+    // connection baar baar nahi banta), isse sending kaafi fast ho jaati hai.
     const transporter = nodemailer.createTransport({
       service: "gmail",
+      pool: true,
+      maxConnections: 5, // ek sath 5 connections parallel use honge
+      maxMessages: 100, // ek connection se max 100 mail (Gmail limit ke andar)
       auth: {
         user: senderEmail,
         pass: appPassword, // yahan normal gmail password nahi, App Password use hoga
       },
     });
 
-    // Har recipient ko alag-alag mail bhejte hai (BCC blast nahi)
+    // Har recipient ko alag-alag mail bhejte hai (BCC blast nahi), lekin ab
+    // ek-ek karke sequential bhejne ki jagah BATCHES me PARALLEL bhejte hai —
+    // isse speed kaafi badh jaati hai.
+    const BATCH_SIZE = 5;
     const results = [];
-    for (const recipient of recipients) {
-      try {
-        const info = await transporter.sendMail({
-          from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
-          to: recipient,
-          subject: subject,
-          text: message,
-          html: `<p>${message.replace(/\n/g, "<br/>")}</p>`,
-        });
-        results.push({ email: recipient, success: true, messageId: info.messageId });
-      } catch (err) {
-        results.push({ email: recipient, success: false, error: err.message });
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+
+    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+      const batch = recipients.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (recipient) => {
+          try {
+            const info = await transporter.sendMail({
+              from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
+              to: recipient,
+              subject: subject,
+              text: message,
+              html: `<p>${message.replace(/\n/g, "<br/>")}</p>`,
+            });
+            return { email: recipient, success: true, messageId: info.messageId };
+          } catch (err) {
+            return { email: recipient, success: false, error: err.message };
+          }
+        })
+      );
+      results.push(...batchResults);
     }
+
+    transporter.close(); // pooled connections band karo
 
     const successCount = results.filter((r) => r.success).length;
     const failedCount = results.length - successCount;
