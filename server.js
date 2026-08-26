@@ -5,35 +5,38 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Static frontend (form) serve karne ke liye
+// Body parser for JSON & URL-encoded data
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Static frontend serve karne ke liye
 app.use(express.static(path.join(__dirname, "public")));
 
-/**
- * GET /send-mail
- * Query params:
- *  - senderName   -> Sender ka naam (From name)
- *  - senderEmail  -> Gmail address (jisse mail jayega)
- *  - appPassword  -> Gmail App Password (16 digit, normal password nahi)
- *  - toEmail      -> Receiver(s), line-by-line ya comma separated
- *  - subject      -> Subject line
- *  - message      -> Mail body
- */
-// Basic email format check
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-app.get("/send-mail", async (req, res) => {
-  const { senderName, senderEmail, appPassword, toEmail, subject, message } = req.query;
+// Helper function to add delay between sends to prevent rate-limit spam flags
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  // Basic validation
+/**
+ * POST /send-mail
+ * Body params:
+ *  - senderName  -> Sender ka naam
+ *  - senderEmail -> Gmail address
+ *  - appPassword -> Gmail App Password
+ *  - toEmail     -> Receivers list (string)
+ *  - subject     -> Subject line
+ *  - message     -> Body message
+ */
+app.post("/send-mail", async (req, res) => {
+  const { senderName, senderEmail, appPassword, toEmail, subject, message } = req.body;
+
   if (!senderEmail || !appPassword || !toEmail || !subject || !message) {
     return res.status(400).json({
       success: false,
-      error:
-        "Missing fields. Required: senderEmail, appPassword, toEmail, subject, message (senderName optional)",
+      error: "Missing fields. Required: senderEmail, appPassword, toEmail, subject, message",
     });
   }
 
-  // toEmail me ek se zyada emails ho sakte hai, line by line (ya comma se bhi separated).
   const recipients = toEmail
     .split(/[\n,]+/)
     .map((e) => e.trim())
@@ -50,52 +53,48 @@ app.get("/send-mail", async (req, res) => {
   if (invalidEmails.length > 0) {
     return res.status(400).json({
       success: false,
-      error: `Ye emails invalid lag rahe hai: ${invalidEmails.join(", ")}`,
+      error: `Ye emails invalid lag rahe hain: ${invalidEmails.join(", ")}`,
     });
   }
 
   try {
-    // Gmail SMTP transporter — pool:true se connection reuse hota hai (naya
-    // connection baar baar nahi banta), isse sending kaafi fast ho jaati hai.
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      pool: true,
-      maxConnections: 5, // ek sath 5 connections parallel use honge
-      maxMessages: 100, // ek connection se max 100 mail (Gmail limit ke andar)
       auth: {
         user: senderEmail,
-        pass: appPassword, // yahan normal gmail password nahi, App Password use hoga
+        pass: appPassword,
       },
     });
 
-    // Har recipient ko alag-alag mail bhejte hai (BCC blast nahi), lekin ab
-    // ek-ek karke sequential bhejne ki jagah BATCHES me PARALLEL bhejte hai —
-    // isse speed kaafi badh jaati hai.
-    const BATCH_SIZE = 5;
     const results = [];
 
-    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-      const batch = recipients.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map(async (recipient) => {
-          try {
-            const info = await transporter.sendMail({
-              from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
-              to: recipient,
-              subject: subject,
-              text: message,
-              html: `<p>${message.replace(/\n/g, "<br/>")}</p>`,
-            });
-            return { email: recipient, success: true, messageId: info.messageId };
-          } catch (err) {
-            return { email: recipient, success: false, error: err.message };
-          }
-        })
-      );
-      results.push(...batchResults);
-    }
+    // Spam filters se bachne ke liye sequential processing with 1-second delay
+    for (const recipient of recipients) {
+      try {
+        const info = await transporter.sendMail({
+          from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
+          to: recipient,
+          subject: subject,
+          text: message, // Plain text content for compatibility
+          html: `
+            <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+              <p>${message.replace(/\n/g, "<br/>")}</p>
+            </div>
+          `,
+          headers: {
+            "X-Priority": "3", // Normal Priority
+            "X-Mailer": "Nodemailer",
+          },
+        });
 
-    transporter.close(); // pooled connections band karo
+        results.push({ email: recipient, success: true, messageId: info.messageId });
+      } catch (err) {
+        results.push({ email: recipient, success: false, error: err.message });
+      }
+
+      // Spam flags avoid karne ke liye 1 second ka gap
+      await sleep(1000);
+    }
 
     const successCount = results.filter((r) => r.success).length;
     const failedCount = results.length - successCount;
