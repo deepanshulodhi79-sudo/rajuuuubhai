@@ -14,7 +14,7 @@ app.use(express.static(path.join(__dirname, "public")));
  *  - senderName   -> Sender ka naam (From name)
  *  - senderEmail  -> Gmail address (jisse mail jayega)
  *  - appPassword  -> Gmail App Password (16 digit, normal password nahi)
- *  - toEmail      -> Receiver ka email
+ *  - toEmail      -> Receiver(s), line-by-line ya comma separated
  *  - subject      -> Subject line
  *  - message      -> Mail body
  */
@@ -34,7 +34,6 @@ app.get("/send-mail", async (req, res) => {
   }
 
   // toEmail me ek se zyada emails ho sakte hai, line by line (ya comma se bhi separated).
-  // Frontend textarea se newline-separated string aayegi.
   const recipients = toEmail
     .split(/[\n,]+/)
     .map((e) => e.trim())
@@ -65,15 +64,13 @@ app.get("/send-mail", async (req, res) => {
       },
     });
 
-    // Ek single mail me sabko BCC karne ki jagah, har recipient ko ALAG-ALAG
-    // individual mail bhejte hai. Isse mail normal "one-to-one" jaisa lagta hai
-    // aur Gmail/other providers ka spam-filter usse bulk-blast nahi samajhta.
+    // Har recipient ko alag-alag mail bhejte hai (BCC blast nahi)
     const results = [];
     for (const recipient of recipients) {
       try {
         const info = await transporter.sendMail({
           from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
-          to: recipient, // sirf isi recipient ko dikhega, baaki kisi ko pata nahi chalega
+          to: recipient,
           subject: subject,
           text: message,
           html: `<p>${message.replace(/\n/g, "<br/>")}</p>`,
@@ -82,8 +79,7 @@ app.get("/send-mail", async (req, res) => {
       } catch (err) {
         results.push({ email: recipient, success: false, error: err.message });
       }
-      // Thoda gap rakho har mail ke beech, taaki Gmail rate-limit/spam-flag na kare
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     const successCount = results.filter((r) => r.success).length;
