@@ -1,5 +1,6 @@
 const express = require("express");
 const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -7,9 +8,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Random delay helper: Human behavior mimic karta hai (500ms - 1200ms)
-const randomDelay = () => {
-  const ms = Math.floor(Math.random() * 700) + 500; // 0.5s se 1.2s
+// Human-like natural delay (1.5s to 3s) to bypass rapid trigger limits
+const smartDelay = () => {
+  const ms = Math.floor(Math.random() * 1500) + 1500;
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
@@ -21,7 +22,7 @@ app.get("/", (req, res) => {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>Fast & Safe Gmail Sender</title>
+      <title>Anti-Spam Gmail Sender</title>
       <style>
         body { font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; }
         .container { max-width: 500px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
@@ -33,10 +34,10 @@ app.get("/", (req, res) => {
     </head>
     <body>
       <div class="container">
-        <h2>Smart Gmail Sender</h2>
+        <h2>Anti-Spam Inbox Sender</h2>
         <form id="mailForm">
           <label>Sender Name</label>
-          <input type="text" id="senderName" placeholder="John Doe">
+          <input type="text" id="senderName" placeholder="Your Name">
 
           <label>Sender Gmail</label>
           <input type="email" id="senderEmail" required placeholder="your.email@gmail.com">
@@ -48,12 +49,12 @@ app.get("/", (req, res) => {
           <textarea id="toEmail" rows="3" required placeholder="user1@gmail.com, user2@gmail.com"></textarea>
 
           <label>Subject</label>
-          <input type="text" id="subject" required placeholder="Subject text">
+          <input type="text" id="subject" required placeholder="Subject line">
 
           <label>Message</label>
-          <textarea id="message" rows="4" required placeholder="Your message..."></textarea>
+          <textarea id="message" rows="4" required placeholder="Message content..."></textarea>
 
-          <button type="submit" id="btn">Fast Send to Inbox</button>
+          <button type="submit" id="btn">Send to Inbox</button>
         </form>
         <p id="status"></p>
       </div>
@@ -66,7 +67,7 @@ app.get("/", (req, res) => {
 
           btn.disabled = true;
           status.style.color = "#333";
-          status.innerText = "Sending... Smart Human Delay Active.";
+          status.innerText = "Processing delivery with Anti-Spam protection...";
 
           const payload = {
             senderName: document.getElementById("senderName").value,
@@ -89,7 +90,7 @@ app.get("/", (req, res) => {
               status.innerText = data.message;
             } else {
               status.style.color = "red";
-              status.innerText = data.error || "Failed";
+              status.innerText = data.error || "Failed to send.";
             }
           } catch (err) {
             status.style.color = "red";
@@ -108,7 +109,7 @@ app.post("/send-mail", async (req, res) => {
   const { senderName, senderEmail, appPassword, toEmail, subject, message } = req.body;
 
   if (!senderEmail || !appPassword || !toEmail || !subject || !message) {
-    return res.status(400).json({ success: false, error: "Missing fields." });
+    return res.status(400).json({ success: false, error: "Missing required fields." });
   }
 
   const recipients = toEmail
@@ -117,13 +118,14 @@ app.post("/send-mail", async (req, res) => {
     .filter((e) => e.length > 0 && isValidEmail(e));
 
   if (recipients.length === 0) {
-    return res.status(400).json({ success: false, error: "Valid email addresses required." });
+    return res.status(400).json({ success: false, error: "Valid recipient emails required." });
   }
 
   try {
-    // Single Transport session reuse setup
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       auth: {
         user: senderEmail,
         pass: appPassword.replace(/\s+/g, ""),
@@ -131,20 +133,34 @@ app.post("/send-mail", async (req, res) => {
     });
 
     const results = [];
+    const domain = senderEmail.split("@")[1] || "gmail.com";
 
     for (const recipient of recipients) {
       try {
+        // Generate unique headers to mimic legitimate mail clients
+        const uniqueId = crypto.randomBytes(8).toString("hex");
+        const customMessageId = `<${Date.now()}.${uniqueId}@${domain}>`;
+
         const info = await transporter.sendMail({
           from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
           to: recipient,
-          replyTo: senderEmail, // Added for spam bypass score
+          replyTo: senderEmail,
           subject: subject,
           text: message,
+          // HTML code with zero-width dynamic character token to break spam duplicate detection
           html: `
-            <div style="font-family: Arial, sans-serif; font-size: 15px; color: #111111; line-height: 1.6; padding: 10px 0;">
-              ${message.replace(/\n/g, "<br/>")}
+            <div style="font-family: Arial, sans-serif; font-size: 15px; color: #222222; line-height: 1.6;">
+              <p>${message.replace(/\n/g, "<br/>")}</p>
+              <!-- ${uniqueId} -->
             </div>
           `,
+          headers: {
+            "Message-ID": customMessageId,
+            "Date": new Date().toUTCString(),
+            "X-Mailer": "Microsoft Outlook 16.0",
+            "X-Priority": "3",
+            "X-MSMail-Priority": "Normal",
+          },
         });
 
         results.push({ email: recipient, success: true, messageId: info.messageId });
@@ -152,8 +168,8 @@ app.post("/send-mail", async (req, res) => {
         results.push({ email: recipient, success: false, error: err.message });
       }
 
-      // Fast random delay (0.5s to 1.2s) to bypass bot footprinting
-      await randomDelay();
+      // Natural randomized delay
+      await smartDelay();
     }
 
     transporter.close();
@@ -161,7 +177,7 @@ app.post("/send-mail", async (req, res) => {
     const successCount = results.filter((r) => r.success).length;
     return res.json({
       success: successCount > 0,
-      message: `${successCount} email(s) delivered!`,
+      message: `${successCount} email(s) successfully delivered!`,
       details: results,
     });
   } catch (err) {
@@ -170,5 +186,5 @@ app.post("/send-mail", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running: http://localhost:${PORT}`);
+  console.log(`Anti-Spam Email Server running at: http://localhost:${PORT}`);
 });
