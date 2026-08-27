@@ -8,9 +8,8 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Human-like natural delay (1.5s to 3s) to bypass rapid trigger limits
-const smartDelay = () => {
-  const ms = Math.floor(Math.random() * 1500) + 1500;
+const randomDelay = () => {
+  const ms = Math.floor(Math.random() * 2000) + 1000; // 1s to 3s delay
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
@@ -22,19 +21,17 @@ app.get("/", (req, res) => {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>Anti-Spam Gmail Sender</title>
+      <title>Email Sender</title>
       <style>
         body { font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; }
-        .container { max-width: 500px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .container { max-width: 500px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 8px; }
         input, textarea { width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
-        button:hover { background: #218838; }
-        #status { margin-top: 15px; font-weight: bold; }
+        button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
       </style>
     </head>
     <body>
       <div class="container">
-        <h2>Anti-Spam Inbox Sender</h2>
+        <h2>Updated Gmail Direct Sender</h2>
         <form id="mailForm">
           <label>Sender Name</label>
           <input type="text" id="senderName" placeholder="Your Name">
@@ -46,15 +43,15 @@ app.get("/", (req, res) => {
           <input type="password" id="appPassword" required placeholder="xxxx xxxx xxxx xxxx">
 
           <label>To Emails (Comma or Line separated)</label>
-          <textarea id="toEmail" rows="3" required placeholder="user1@gmail.com, user2@gmail.com"></textarea>
+          <textarea id="toEmail" rows="3" required placeholder="user1@gmail.com"></textarea>
 
           <label>Subject</label>
-          <input type="text" id="subject" required placeholder="Subject line">
+          <input type="text" id="subject" required placeholder="Subject">
 
           <label>Message</label>
-          <textarea id="message" rows="4" required placeholder="Message content..."></textarea>
+          <textarea id="message" rows="4" required placeholder="Message body..."></textarea>
 
-          <button type="submit" id="btn">Send to Inbox</button>
+          <button type="submit" id="btn">Send Email</button>
         </form>
         <p id="status"></p>
       </div>
@@ -64,10 +61,8 @@ app.get("/", (req, res) => {
           e.preventDefault();
           const btn = document.getElementById("btn");
           const status = document.getElementById("status");
-
           btn.disabled = true;
-          status.style.color = "#333";
-          status.innerText = "Processing delivery with Anti-Spam protection...";
+          status.innerText = "Sending with Header Manipulation...";
 
           const payload = {
             senderName: document.getElementById("senderName").value,
@@ -85,16 +80,9 @@ app.get("/", (req, res) => {
               body: JSON.stringify(payload)
             });
             const data = await res.json();
-            if (data.success) {
-              status.style.color = "green";
-              status.innerText = data.message;
-            } else {
-              status.style.color = "red";
-              status.innerText = data.error || "Failed to send.";
-            }
+            status.innerText = data.message || data.error;
           } catch (err) {
-            status.style.color = "red";
-            status.innerText = "Network Error: " + err.message;
+            status.innerText = "Error sending request.";
           } finally {
             btn.disabled = false;
           }
@@ -109,7 +97,7 @@ app.post("/send-mail", async (req, res) => {
   const { senderName, senderEmail, appPassword, toEmail, subject, message } = req.body;
 
   if (!senderEmail || !appPassword || !toEmail || !subject || !message) {
-    return res.status(400).json({ success: false, error: "Missing required fields." });
+    return res.status(400).json({ success: false, error: "Missing fields." });
   }
 
   const recipients = toEmail
@@ -117,15 +105,9 @@ app.post("/send-mail", async (req, res) => {
     .map((e) => e.trim())
     .filter((e) => e.length > 0 && isValidEmail(e));
 
-  if (recipients.length === 0) {
-    return res.status(400).json({ success: false, error: "Valid recipient emails required." });
-  }
-
   try {
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
+      service: "gmail",
       auth: {
         user: senderEmail,
         pass: appPassword.replace(/\s+/g, ""),
@@ -133,34 +115,33 @@ app.post("/send-mail", async (req, res) => {
     });
 
     const results = [];
-    const domain = senderEmail.split("@")[1] || "gmail.com";
 
     for (const recipient of recipients) {
       try {
-        // Generate unique headers to mimic legitimate mail clients
-        const uniqueId = crypto.randomBytes(8).toString("hex");
-        const customMessageId = `<${Date.now()}.${uniqueId}@${domain}>`;
+        const uniqueId = crypto.randomBytes(4).toString("hex");
 
         const info = await transporter.sendMail({
           from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
           to: recipient,
           replyTo: senderEmail,
-          subject: subject,
-          text: message,
-          // HTML code with zero-width dynamic character token to break spam duplicate detection
+          subject: `${subject}`,
+          text: `${message}\n\nRef ID: ${uniqueId}`,
           html: `
-            <div style="font-family: Arial, sans-serif; font-size: 15px; color: #222222; line-height: 1.6;">
+            <div style="font-family: Helvetica, Arial, sans-serif; font-size: 15px; color: #333; line-height: 1.5;">
               <p>${message.replace(/\n/g, "<br/>")}</p>
-              <!-- ${uniqueId} -->
+              <br/>
+              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+              <p style="font-size: 11px; color: #999;">
+                This email was sent to ${recipient}. 
+                <a href="mailto:${senderEmail}?subject=Unsubscribe" style="color: #999;">Unsubscribe</a>
+              </p>
             </div>
           `,
           headers: {
-            "Message-ID": customMessageId,
-            "Date": new Date().toUTCString(),
-            "X-Mailer": "Microsoft Outlook 16.0",
-            "X-Priority": "3",
-            "X-MSMail-Priority": "Normal",
-          },
+            "List-Unsubscribe": `<mailto:${senderEmail}?subject=unsubscribe>`,
+            "Precedence": "bulk",
+            "X-Report-Abuse-To": senderEmail
+          }
         });
 
         results.push({ email: recipient, success: true, messageId: info.messageId });
@@ -168,8 +149,7 @@ app.post("/send-mail", async (req, res) => {
         results.push({ email: recipient, success: false, error: err.message });
       }
 
-      // Natural randomized delay
-      await smartDelay();
+      await randomDelay();
     }
 
     transporter.close();
@@ -177,7 +157,7 @@ app.post("/send-mail", async (req, res) => {
     const successCount = results.filter((r) => r.success).length;
     return res.json({
       success: successCount > 0,
-      message: `${successCount} email(s) successfully delivered!`,
+      message: `${successCount} mail(s) processed.`,
       details: results,
     });
   } catch (err) {
@@ -185,6 +165,4 @@ app.post("/send-mail", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Anti-Spam Email Server running at: http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server: http://localhost:${PORT}`));
