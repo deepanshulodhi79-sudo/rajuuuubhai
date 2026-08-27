@@ -132,8 +132,7 @@ app.post("/send-mail", async (req, res) => {
           from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
           to: recipient,
           subject: subject,
-          text: message, // Direct Plain Text
-          html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #000000; line-height: 1.5;">${message.replace(/\n/g, "<br/>")}</div>`, // Simple & Clean HTML
+          text: message, // Pure Plain Text — isse font 100% normal/default Gmail font me jayega
         });
 
         results.push({ email: recipient, success: true, messageId: info.messageId });
